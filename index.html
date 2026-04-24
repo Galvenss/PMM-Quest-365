@@ -455,6 +455,8 @@ function TemasClave() {
   const [newConcepto, setNewConcepto] = useState({});
   const [confirmDeleteTema, setConfirmDeleteTema] = useState(null);
   const [confirmDeleteConcepto, setConfirmDeleteConcepto] = useState(null);
+  const [editingConcepto, setEditingConcepto] = useState(null); // {temaId, conceptoId}
+  const [editConceptoText, setEditConceptoText] = useState('');
 
   useEffect(() => {
     const ref = db.ref('temas');
@@ -492,6 +494,18 @@ function TemasClave() {
   const deleteConcepto = async (temaId, conceptoId) => {
     await db.ref(`temas/${temaId}/conceptos/${conceptoId}`).remove();
     setConfirmDeleteConcepto(null);
+  };
+
+  const startEditConcepto = (temaId, conceptoId, texto) => {
+    setEditingConcepto({ temaId, conceptoId });
+    setEditConceptoText(texto);
+  };
+
+  const saveEditConcepto = async () => {
+    if (!editConceptoText.trim() || !editingConcepto) return;
+    await db.ref(`temas/${editingConcepto.temaId}/conceptos/${editingConcepto.conceptoId}`).update({ texto: editConceptoText.trim() });
+    setEditingConcepto(null);
+    setEditConceptoText('');
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '3rem', color: '#999', fontSize: 14 }}>Cargando temas...</div>;
@@ -568,21 +582,36 @@ function TemasClave() {
                 {conceptos.length === 0 ? (
                   <p style={{ fontSize: 13, color: '#bbb', textAlign: 'center', padding: '12px 0' }}>Añade el primer concepto</p>
                 ) : conceptos.map(c => (
-                  <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #f9f9f7' }}>
-                    <button onClick={() => toggleDone(tema.id, c.id, c.done)}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${c.done ? '#4ade80' : '#ddd'}`, background: c.done ? '#dcfce7' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, cursor: 'pointer' }}>
-                      {c.done && <span style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>✓</span>}
-                    </button>
-                    <p style={{ flex: 1, fontSize: 14, color: c.done ? '#aaa' : '#1a1a1a', fontWeight: 500, lineHeight: 1.4, textDecoration: c.done ? 'line-through' : 'none' }}>
-                      {c.texto}
-                    </p>
-                    {confirmDeleteConcepto === c.id ? (
-                      <div style={{ display: 'flex', gap: 4 }}>
-                        <button onClick={() => deleteConcepto(tema.id, c.id)} style={{ fontSize: 11, padding: '3px 8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 600 }}>Borrar</button>
-                        <button onClick={() => setConfirmDeleteConcepto(null)} style={{ fontSize: 11, padding: '3px 8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 5 }}>No</button>
+                  <div key={c.id} style={{ padding: '8px 0', borderBottom: '1px solid #f9f9f7' }}>
+                    {editingConcepto?.conceptoId === c.id ? (
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <input type="text" value={editConceptoText} onChange={e => setEditConceptoText(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && saveEditConcepto()}
+                          style={{ flex: 1, fontSize: 13, padding: '7px 10px' }} autoFocus />
+                        <button onClick={saveEditConcepto} style={{ padding: '7px 12px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>✓</button>
+                        <button onClick={() => setEditingConcepto(null)} style={{ padding: '7px 10px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 7, fontSize: 13 }}>✗</button>
                       </div>
                     ) : (
-                      <button onClick={() => setConfirmDeleteConcepto(c.id)} style={{ fontSize: 14, background: 'none', border: 'none', color: '#ddd', padding: '0 2px', flexShrink: 0 }}>🗑️</button>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                        <button onClick={() => toggleDone(tema.id, c.id, c.done)}
+                          style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${c.done ? '#4ade80' : '#ddd'}`, background: c.done ? '#dcfce7' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, cursor: 'pointer' }}>
+                          {c.done && <span style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>✓</span>}
+                        </button>
+                        <p style={{ flex: 1, fontSize: 14, color: c.done ? '#aaa' : '#1a1a1a', fontWeight: 500, lineHeight: 1.4, textDecoration: c.done ? 'line-through' : 'none' }}>
+                          {c.texto}
+                        </p>
+                        {confirmDeleteConcepto === c.id ? (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => deleteConcepto(tema.id, c.id)} style={{ fontSize: 11, padding: '3px 8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 600 }}>Borrar</button>
+                            <button onClick={() => setConfirmDeleteConcepto(null)} style={{ fontSize: 11, padding: '3px 8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 5 }}>No</button>
+                          </div>
+                        ) : (
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => startEditConcepto(tema.id, c.id, c.texto)} style={{ fontSize: 13, background: 'none', border: 'none', color: '#bbb', padding: '0 2px', flexShrink: 0 }}>✏️</button>
+                            <button onClick={() => setConfirmDeleteConcepto(c.id)} style={{ fontSize: 13, background: 'none', border: 'none', color: '#bbb', padding: '0 2px', flexShrink: 0 }}>🗑️</button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
                 ))}
