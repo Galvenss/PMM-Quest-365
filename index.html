@@ -432,8 +432,179 @@ function ExamenTab({ questions }) {
   }
 }
 
-/* ─── BANCO DE PREGUNTAS (con editar/borrar) ─── */
+/* ─── TEMAS CLAVE ─── */
+function TemasClave() {
+  const [temas, setTemas] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
+  const [showNewTema, setShowNewTema] = useState(false);
+  const [newTemaNum, setNewTemaNum] = useState('');
+  const [newTemaNombre, setNewTemaNombre] = useState('');
+  const [newConcepto, setNewConcepto] = useState({});
+  const [confirmDeleteTema, setConfirmDeleteTema] = useState(null);
+  const [confirmDeleteConcepto, setConfirmDeleteConcepto] = useState(null);
+
+  useEffect(() => {
+    const ref = db.ref('temas');
+    ref.on('value', snap => {
+      const val = snap.val();
+      setTemas(val ? Object.entries(val).map(([id, t]) => ({ ...t, id })).sort((a, b) => a.numero - b.numero) : []);
+      setLoading(false);
+    });
+    return () => ref.off();
+  }, []);
+
+  const addTema = async () => {
+    if (!newTemaNum.trim() || !newTemaNombre.trim()) return;
+    await db.ref('temas').push({ numero: parseInt(newTemaNum), nombre: newTemaNombre.trim(), conceptos: {} });
+    setNewTemaNum(''); setNewTemaNombre(''); setShowNewTema(false);
+  };
+
+  const deleteTema = async (id) => {
+    await db.ref(`temas/${id}`).remove();
+    setConfirmDeleteTema(null);
+    if (expandedId === id) setExpandedId(null);
+  };
+
+  const addConcepto = async (temaId) => {
+    const texto = (newConcepto[temaId] || '').trim();
+    if (!texto) return;
+    await db.ref(`temas/${temaId}/conceptos`).push({ texto, done: false, ts: Date.now() });
+    setNewConcepto(p => ({ ...p, [temaId]: '' }));
+  };
+
+  const toggleDone = async (temaId, conceptoId, current) => {
+    await db.ref(`temas/${temaId}/conceptos/${conceptoId}`).update({ done: !current });
+  };
+
+  const deleteConcepto = async (temaId, conceptoId) => {
+    await db.ref(`temas/${temaId}/conceptos/${conceptoId}`).remove();
+    setConfirmDeleteConcepto(null);
+  };
+
+  if (loading) return <div style={{ textAlign: 'center', padding: '3rem', color: '#999', fontSize: 14 }}>Cargando temas...</div>;
+
+  return (
+    <div style={{ padding: '1rem 1.25rem', paddingBottom: 90 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+        <div>
+          <p style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a' }}>Temas Clave</p>
+          <p style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>Conceptos que seguro caen en el examen</p>
+        </div>
+        <button onClick={() => setShowNewTema(v => !v)}
+          style={{ padding: '8px 14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 600 }}>
+          + Tema
+        </button>
+      </div>
+
+      {showNewTema && (
+        <div style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 12, padding: '14px', marginBottom: 16 }}>
+          <p style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', marginBottom: 12 }}>Nuevo tema</p>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+            <input type="number" placeholder="Nº" value={newTemaNum} onChange={e => setNewTemaNum(e.target.value)} style={{ width: 64, fontSize: 13 }} />
+            <input type="text" placeholder="Nombre del tema" value={newTemaNombre} onChange={e => setNewTemaNombre(e.target.value)} onKeyDown={e => e.key === 'Enter' && addTema()} style={{ flex: 1, fontSize: 13 }} />
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button onClick={addTema} style={{ flex: 1, padding: '9px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Crear tema</button>
+            <button onClick={() => setShowNewTema(false)} style={{ flex: 1, padding: '9px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 7, fontSize: 13 }}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {temas.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+          <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+          <p style={{ fontSize: 14, color: '#999' }}>No hay temas todavía</p>
+          <p style={{ fontSize: 13, color: '#bbb', marginTop: 6 }}>Pulsa "+ Tema" para añadir el primero</p>
+        </div>
+      ) : temas.map(tema => {
+        const conceptos = tema.conceptos ? Object.entries(tema.conceptos).map(([id, c]) => ({ ...c, id })).sort((a, b) => a.ts - b.ts) : [];
+        const doneCount = conceptos.filter(c => c.done).length;
+        const isExpanded = expandedId === tema.id;
+
+        return (
+          <div key={tema.id} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 14, marginBottom: 10, overflow: 'hidden' }}>
+            {/* Cabecera del tema */}
+            <div onClick={() => setExpandedId(isExpanded ? null : tema.id)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px', cursor: 'pointer' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f0f0ee', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 13, fontWeight: 800, color: '#555' }}>{tema.numero}</span>
+              </div>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: '#1a1a1a', lineHeight: 1.3 }}>{tema.nombre}</p>
+                <p style={{ fontSize: 12, color: '#aaa', marginTop: 2 }}>
+                  {conceptos.length === 0 ? 'Sin conceptos' : `${doneCount}/${conceptos.length} dominados`}
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {conceptos.length > 0 && (
+                  <span style={{ fontSize: 12, fontWeight: 700, color: doneCount === conceptos.length ? '#3a9c5f' : '#f0a500' }}>
+                    {doneCount === conceptos.length ? '✓' : `${Math.round((doneCount/conceptos.length)*100)}%`}
+                  </span>
+                )}
+                <span style={{ fontSize: 18, color: '#ccc' }}>{isExpanded ? '▲' : '▼'}</span>
+              </div>
+            </div>
+
+            {/* Contenido expandido */}
+            {isExpanded && (
+              <div style={{ borderTop: '1px solid #f0f0ee', padding: '12px 14px' }}>
+                {/* Lista de conceptos */}
+                {conceptos.length === 0 ? (
+                  <p style={{ fontSize: 13, color: '#bbb', textAlign: 'center', padding: '12px 0' }}>Añade el primer concepto</p>
+                ) : conceptos.map(c => (
+                  <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '8px 0', borderBottom: '1px solid #f9f9f7' }}>
+                    <button onClick={() => toggleDone(tema.id, c.id, c.done)}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: `2px solid ${c.done ? '#4ade80' : '#ddd'}`, background: c.done ? '#dcfce7' : '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 1, cursor: 'pointer' }}>
+                      {c.done && <span style={{ fontSize: 12, color: '#166534', fontWeight: 700 }}>✓</span>}
+                    </button>
+                    <p style={{ flex: 1, fontSize: 14, color: c.done ? '#aaa' : '#1a1a1a', fontWeight: 500, lineHeight: 1.4, textDecoration: c.done ? 'line-through' : 'none' }}>
+                      {c.texto}
+                    </p>
+                    {confirmDeleteConcepto === c.id ? (
+                      <div style={{ display: 'flex', gap: 4 }}>
+                        <button onClick={() => deleteConcepto(tema.id, c.id)} style={{ fontSize: 11, padding: '3px 8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 5, fontWeight: 600 }}>Borrar</button>
+                        <button onClick={() => setConfirmDeleteConcepto(null)} style={{ fontSize: 11, padding: '3px 8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 5 }}>No</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setConfirmDeleteConcepto(c.id)} style={{ fontSize: 14, background: 'none', border: 'none', color: '#ddd', padding: '0 2px', flexShrink: 0 }}>🗑️</button>
+                    )}
+                  </div>
+                ))}
+
+                {/* Añadir concepto */}
+                <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                  <input type="text" placeholder="Añadir concepto clave..." value={newConcepto[tema.id] || ''}
+                    onChange={e => setNewConcepto(p => ({ ...p, [tema.id]: e.target.value }))}
+                    onKeyDown={e => e.key === 'Enter' && addConcepto(tema.id)}
+                    style={{ flex: 1, fontSize: 13, padding: '8px 10px' }} />
+                  <button onClick={() => addConcepto(tema.id)}
+                    style={{ padding: '8px 14px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>+</button>
+                </div>
+
+                {/* Borrar tema */}
+                {confirmDeleteTema === tema.id ? (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                    <button onClick={() => deleteTema(tema.id)} style={{ flex: 1, padding: '8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Sí, borrar tema</button>
+                    <button onClick={() => setConfirmDeleteTema(null)} style={{ flex: 1, padding: '8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 7, fontSize: 13 }}>Cancelar</button>
+                  </div>
+                ) : (
+                  <button onClick={() => setConfirmDeleteTema(tema.id)} style={{ marginTop: 12, fontSize: 12, color: '#d9534f', background: 'none', border: 'none', padding: 0, fontWeight: 500 }}>
+                    Borrar este tema
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── BANCO DE PREGUNTAS (con editar/borrar + Temas Clave) ─── */
 function BancoTab({ user, questions, onDelete, onEdit }) {
+  const [subTab, setSubTab] = useState('preguntas');
   const [search, setSearch] = useState('');
   const [filterAuthor, setFilterAuthor] = useState('todos');
   const [editingId, setEditingId] = useState(null);
@@ -460,98 +631,102 @@ function BancoTab({ user, questions, onDelete, onEdit }) {
   const lbl = { display: 'block', fontSize: 12, color: '#777', marginBottom: 5, marginTop: 10, fontWeight: 500 };
 
   return (
-    <div style={{ padding: '1rem 1.25rem', paddingBottom: 90 }}>
-      <input type="text" placeholder="🔍  Buscar pregunta..." value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 12 }} />
-      <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
-        {['todos', ...authors].map(a => (
-          <button key={a} onClick={() => setFilterAuthor(a)}
-            style={{ padding: '5px 12px', fontSize: 13, fontWeight: filterAuthor === a ? 700 : 400, border: `1.5px solid ${filterAuthor === a ? '#1a1a1a' : '#e5e5e5'}`, borderRadius: 99, background: filterAuthor === a ? '#1a1a1a' : '#fff', color: filterAuthor === a ? '#fff' : '#666', cursor: 'pointer' }}>
-            {a === 'todos' ? 'Todos' : a}
+    <div style={{ paddingBottom: 90 }}>
+      {/* Sub-pestañas */}
+      <div style={{ display: 'flex', borderBottom: '1px solid #e5e5e5', background: '#fff', position: 'sticky', top: 57, zIndex: 9 }}>
+        {[{ id: 'preguntas', label: '📝 Preguntas' }, { id: 'temas', label: '📋 Temas Clave' }].map(s => (
+          <button key={s.id} onClick={() => setSubTab(s.id)}
+            style={{ flex: 1, padding: '12px 8px', fontSize: 13, fontWeight: subTab === s.id ? 700 : 400, color: subTab === s.id ? '#1a1a1a' : '#aaa', background: 'none', border: 'none', borderBottom: subTab === s.id ? '2.5px solid #1a1a1a' : '2.5px solid transparent', cursor: 'pointer' }}>
+            {s.label}
           </button>
         ))}
       </div>
-      <p style={{ fontSize: 12, color: '#aaa', marginBottom: 12 }}>{filtered.length} pregunta{filtered.length !== 1 ? 's' : ''}</p>
 
-      {filtered.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
-          <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
-          <p style={{ fontSize: 14, color: '#999' }}>No hay preguntas</p>
-        </div>
-      ) : filtered.map(q => (
-        <div key={q.id} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
-          {editingId === q.id ? (
-            /* Formulario edición */
-            <div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', marginBottom: 10 }}>Editando pregunta</p>
-              <label style={lbl}>Enunciado</label>
-              <textarea rows={2} value={editForm.enunciado} onChange={e => setEditForm(f => ({ ...f, enunciado: e.target.value }))} style={{ fontSize: 13 }} />
-              {['a', 'b', 'c'].map(k => (
-                <div key={k}>
-                  <label style={lbl}>Opción {k.toUpperCase()}</label>
-                  <input type="text" value={editForm[k]} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))} style={{ fontSize: 13 }} />
-                </div>
-              ))}
-              <label style={{ ...lbl, marginTop: 12 }}>Correcta</label>
-              <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                {['a', 'b', 'c'].map(k => (
-                  <button key={k} onClick={() => setEditForm(f => ({ ...f, correct: k }))}
-                    style={{ flex: 1, padding: '7px', fontSize: 13, fontWeight: 600, border: `2px solid ${editForm.correct === k ? '#1a1a1a' : '#e5e5e5'}`, borderRadius: 7, background: editForm.correct === k ? '#1a1a1a' : '#fff', color: editForm.correct === k ? '#fff' : '#888' }}>
-                    {k.toUpperCase()}
-                  </button>
-                ))}
-              </div>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => saveEdit(q.id)} style={{ flex: 1, padding: '9px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Guardar</button>
-                <button onClick={() => setEditingId(null)} style={{ flex: 1, padding: '9px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 7, fontSize: 13, fontWeight: 500 }}>Cancelar</button>
-              </div>
+      {subTab === 'temas' ? <TemasClave /> : (
+        <div style={{ padding: '1rem 1.25rem' }}>
+          <input type="text" placeholder="🔍  Buscar pregunta..." value={search} onChange={e => setSearch(e.target.value)} style={{ marginBottom: 12 }} />
+          <div style={{ display: 'flex', gap: 8, marginBottom: 16, flexWrap: 'wrap' }}>
+            {['todos', ...authors].map(a => (
+              <button key={a} onClick={() => setFilterAuthor(a)}
+                style={{ padding: '5px 12px', fontSize: 13, fontWeight: filterAuthor === a ? 700 : 400, border: `1.5px solid ${filterAuthor === a ? '#1a1a1a' : '#e5e5e5'}`, borderRadius: 99, background: filterAuthor === a ? '#1a1a1a' : '#fff', color: filterAuthor === a ? '#fff' : '#666', cursor: 'pointer' }}>
+                {a === 'todos' ? 'Todos' : a}
+              </button>
+            ))}
+          </div>
+          <p style={{ fontSize: 12, color: '#aaa', marginBottom: 12 }}>{filtered.length} pregunta{filtered.length !== 1 ? 's' : ''}</p>
+
+          {filtered.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📭</div>
+              <p style={{ fontSize: 14, color: '#999' }}>No hay preguntas</p>
             </div>
-          ) : (
-            <>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                <Avatar name={q.author} size={24} />
-                <span style={{ fontSize: 12, color: '#888', fontWeight: 500, flex: 1 }}>{q.author} · {q.date}</span>
-                {q.author === user && (
-                  <div style={{ display: 'flex', gap: 6 }}>
-                    <button onClick={() => startEdit(q)}
-                      style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', color: '#555', fontWeight: 500 }}>
-                      ✏️ Editar
-                    </button>
-                    <button onClick={() => setConfirmDelete(q.id)}
-                      style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fff', color: '#d9534f', fontWeight: 500 }}>
-                      🗑️
-                    </button>
+          ) : filtered.map(q => (
+            <div key={q.id} style={{ background: '#fff', border: '1px solid #e5e5e5', borderRadius: 12, padding: '12px 14px', marginBottom: 10 }}>
+              {editingId === q.id ? (
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: '#1a1a1a', marginBottom: 10 }}>Editando pregunta</p>
+                  <label style={lbl}>Enunciado</label>
+                  <textarea rows={2} value={editForm.enunciado} onChange={e => setEditForm(f => ({ ...f, enunciado: e.target.value }))} style={{ fontSize: 13 }} />
+                  {['a', 'b', 'c'].map(k => (
+                    <div key={k}>
+                      <label style={lbl}>Opción {k.toUpperCase()}</label>
+                      <input type="text" value={editForm[k]} onChange={e => setEditForm(f => ({ ...f, [k]: e.target.value }))} style={{ fontSize: 13 }} />
+                    </div>
+                  ))}
+                  <label style={{ ...lbl, marginTop: 12 }}>Correcta</label>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                    {['a', 'b', 'c'].map(k => (
+                      <button key={k} onClick={() => setEditForm(f => ({ ...f, correct: k }))}
+                        style={{ flex: 1, padding: '7px', fontSize: 13, fontWeight: 600, border: `2px solid ${editForm.correct === k ? '#1a1a1a' : '#e5e5e5'}`, borderRadius: 7, background: editForm.correct === k ? '#1a1a1a' : '#fff', color: editForm.correct === k ? '#fff' : '#888' }}>
+                        {k.toUpperCase()}
+                      </button>
+                    ))}
                   </div>
-                )}
-              </div>
-
-              {confirmDelete === q.id ? (
-                <div style={{ background: '#fdf2f2', border: '1px solid #f5c6cb', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
-                  <p style={{ fontSize: 13, color: '#d9534f', marginBottom: 10, fontWeight: 500 }}>¿Borrar esta pregunta?</p>
                   <div style={{ display: 'flex', gap: 8 }}>
-                    <button onClick={async () => { await onDelete(q.id); setConfirmDelete(null); }}
-                      style={{ flex: 1, padding: '8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>Sí, borrar</button>
-                    <button onClick={() => setConfirmDelete(null)}
-                      style={{ flex: 1, padding: '8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13 }}>Cancelar</button>
+                    <button onClick={() => saveEdit(q.id)} style={{ flex: 1, padding: '9px', background: '#1a1a1a', color: '#fff', border: 'none', borderRadius: 7, fontSize: 13, fontWeight: 600 }}>Guardar</button>
+                    <button onClick={() => setEditingId(null)} style={{ flex: 1, padding: '9px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 7, fontSize: 13, fontWeight: 500 }}>Cancelar</button>
                   </div>
                 </div>
               ) : (
                 <>
-                  <p style={{ fontSize: 14, lineHeight: 1.5, color: '#1a1a1a', fontWeight: 600, marginBottom: 8 }}>{q.enunciado}</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                    {['a', 'b', 'c'].map(k => (
-                      <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 7, background: k === q.correct ? '#dcfce7' : '#f9f9f7', border: `1px solid ${k === q.correct ? '#86efac' : '#ebebeb'}` }}>
-                        <span style={{ width: 18, height: 18, borderRadius: '50%', background: k === q.correct ? '#4ade80' : '#e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: k === q.correct ? '#166534' : '#888', flexShrink: 0 }}>{k.toUpperCase()}</span>
-                        <span style={{ fontSize: 13, color: k === q.correct ? '#166534' : '#555', fontWeight: k === q.correct ? 600 : 400 }}>{q.options[k]}</span>
-                        {k === q.correct && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#3a9c5f', fontWeight: 700 }}>✓</span>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <Avatar name={q.author} size={24} />
+                    <span style={{ fontSize: 12, color: '#888', fontWeight: 500, flex: 1 }}>{q.author} · {q.date}</span>
+                    {q.author === user && (
+                      <div style={{ display: 'flex', gap: 6 }}>
+                        <button onClick={() => startEdit(q)} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #e5e5e5', borderRadius: 6, background: '#fff', color: '#555', fontWeight: 500 }}>✏️ Editar</button>
+                        <button onClick={() => setConfirmDelete(q.id)} style={{ fontSize: 12, padding: '4px 10px', border: '1px solid #fca5a5', borderRadius: 6, background: '#fff', color: '#d9534f', fontWeight: 500 }}>🗑️</button>
                       </div>
-                    ))}
+                    )}
                   </div>
+                  {confirmDelete === q.id ? (
+                    <div style={{ background: '#fdf2f2', border: '1px solid #f5c6cb', borderRadius: 8, padding: '10px 12px', marginBottom: 6 }}>
+                      <p style={{ fontSize: 13, color: '#d9534f', marginBottom: 10, fontWeight: 500 }}>¿Borrar esta pregunta?</p>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        <button onClick={async () => { await onDelete(q.id); setConfirmDelete(null); }} style={{ flex: 1, padding: '8px', background: '#d9534f', color: '#fff', border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600 }}>Sí, borrar</button>
+                        <button onClick={() => setConfirmDelete(null)} style={{ flex: 1, padding: '8px', background: '#f5f5f3', color: '#555', border: '1px solid #e5e5e5', borderRadius: 6, fontSize: 13 }}>Cancelar</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <p style={{ fontSize: 14, lineHeight: 1.5, color: '#1a1a1a', fontWeight: 600, marginBottom: 8 }}>{q.enunciado}</p>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                        {['a', 'b', 'c'].map(k => (
+                          <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', borderRadius: 7, background: k === q.correct ? '#dcfce7' : '#f9f9f7', border: `1px solid ${k === q.correct ? '#86efac' : '#ebebeb'}` }}>
+                            <span style={{ width: 18, height: 18, borderRadius: '50%', background: k === q.correct ? '#4ade80' : '#e5e5e5', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: k === q.correct ? '#166534' : '#888', flexShrink: 0 }}>{k.toUpperCase()}</span>
+                            <span style={{ fontSize: 13, color: k === q.correct ? '#166534' : '#555', fontWeight: k === q.correct ? 600 : 400 }}>{q.options[k]}</span>
+                            {k === q.correct && <span style={{ marginLeft: 'auto', fontSize: 11, color: '#3a9c5f', fontWeight: 700 }}>✓</span>}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </>
               )}
-            </>
-          )}
+            </div>
+          ))}
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -723,7 +898,7 @@ function App() {
 
   const navItems = [
     { id: 'crear',      icon: '＋',  label: 'Crear' },
-    { id: 'responder',  icon: '◯',   label: 'Test' },
+    { id: 'responder',  icon: '◯',   label: 'Test Diario' },
     { id: 'examen',     icon: '🎓',  label: 'Examen' },
     { id: 'banco',      icon: '📋',  label: 'Banco' },
     { id: 'resultados', icon: '◎',   label: 'Resultados' },
